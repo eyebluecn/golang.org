@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build go1.5
-
 // Package ssa/interp defines an interpreter for the SSA
 // representation of Go programs.
 //
@@ -22,11 +20,13 @@
 //
 // * The reflect package is only partially implemented.
 //
-// * "sync/atomic" operations are not currently atomic due to the
-// "boxed" value representation: it is not possible to read, modify
-// and write an interface value atomically.  As a consequence, Mutexes
-// are currently broken.  TODO(adonovan): provide a metacircular
-// implementation of Mutex avoiding the broken atomic primitives.
+// * The "testing" package is no longer supported because it
+// depends on low-level details that change too often.
+//
+// * "sync/atomic" operations are not atomic due to the "boxed" value
+// representation: it is not possible to read, modify and write an
+// interface value atomically. As a consequence, Mutexes are currently
+// broken.
 //
 // * recover is only partially implemented.  Also, the interpreter
 // makes no attempt to distinguish target panics from interpreter
@@ -314,9 +314,7 @@ func visitInstr(fr *frame, instr ssa.Instruction) continuation {
 		fr.env[instr] = fr.get(instr.Iter).(iter).next()
 
 	case *ssa.FieldAddr:
-		x := fr.get(instr.X)
-		// FIXME wrong!  &global.f must not change if we do *global = zero!
-		fr.env[instr] = &(*x.(*value)).(structure)[instr.Field]
+		fr.env[instr] = &(*fr.get(instr.X).(*value)).(structure)[instr.Field]
 
 	case *ssa.Field:
 		fr.env[instr] = fr.get(instr.X).(structure)[instr.Field]
@@ -632,30 +630,6 @@ func setGlobal(i *interpreter, pkg *ssa.Package, name string, v value) {
 	panic("no global variable: " + pkg.Pkg.Path() + "." + name)
 }
 
-var environ []value
-
-func init() {
-	for _, s := range os.Environ() {
-		environ = append(environ, s)
-	}
-	environ = append(environ, "GOSSAINTERP=1")
-	environ = append(environ, "GOARCH="+runtime.GOARCH)
-}
-
-// deleteBodies delete the bodies of all standalone functions except the
-// specified ones.  A missing intrinsic leads to a clear runtime error.
-func deleteBodies(pkg *ssa.Package, except ...string) {
-	keep := make(map[string]bool)
-	for _, e := range except {
-		keep[e] = true
-	}
-	for _, mem := range pkg.Members {
-		if fn, ok := mem.(*ssa.Function); ok && !keep[fn.Name()] {
-			fn.Blocks = nil
-		}
-	}
-}
-
 // Interpret interprets the Go program whose main package is mainpkg.
 // mode specifies various interpreter options.  filename and args are
 // the initial values of os.Args for the target program.  sizes is the
@@ -667,11 +641,6 @@ func deleteBodies(pkg *ssa.Package, except ...string) {
 // The SSA program must include the "runtime" package.
 //
 func Interpret(mainpkg *ssa.Package, mode Mode, sizes types.Sizes, filename string, args []string) (exitCode int) {
-	if syswrite == nil {
-		fmt.Fprintln(os.Stderr, "Interpret: unsupported platform.")
-		return 1
-	}
-
 	i := &interpreter{
 		prog:       mainpkg.Prog,
 		globals:    make(map[ssa.Value]*value),
@@ -700,20 +669,6 @@ func Interpret(mainpkg *ssa.Package, mode Mode, sizes types.Sizes, filename stri
 				cell := zero(deref(v.Type()))
 				i.globals[v] = &cell
 			}
-		}
-
-		// Ad-hoc initialization for magic system variables.
-		switch pkg.Pkg.Path() {
-		case "syscall":
-			setGlobal(i, pkg, "envs", environ)
-
-		case "reflect":
-			deleteBodies(pkg, "DeepEqual", "deepValueEqual")
-
-		case "runtime":
-			sz := sizes.Sizeof(pkg.Pkg.Scope().Lookup("MemStats").Type())
-			setGlobal(i, pkg, "sizeof_C_MStats", uintptr(sz))
-			deleteBodies(pkg, "GOROOT", "gogetenv")
 		}
 	}
 

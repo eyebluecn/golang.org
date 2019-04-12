@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build go1.5
-
 package interp
 
 // Emulated "reflect" package.
@@ -68,11 +66,6 @@ func rV2V(v value) value {
 // makeReflectType boxes up an rtype in a reflect.Type interface.
 func makeReflectType(rt rtype) value {
 	return iface{rtypeType, rt}
-}
-
-func ext۰reflect۰Init(fr *frame, args []value) value {
-	// Signature: func()
-	return nil
 }
 
 func ext۰reflect۰rtype۰Bits(fr *frame, args []value) value {

@@ -10,6 +10,7 @@ import (
 	"go/build"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -74,7 +75,7 @@ func what(q *Query) error {
 			}
 		}
 
-		// For pointsto, we approximate findInterestingNode.
+		// For pointsto and whicherrs, we approximate findInterestingNode.
 		if _, ok := enable["pointsto"]; !ok {
 			switch n.(type) {
 			case ast.Stmt,
@@ -84,10 +85,14 @@ func what(q *Query) error {
 				*ast.InterfaceType,
 				*ast.MapType,
 				*ast.ChanType:
-				enable["pointsto"] = false // not an expr
+				// not an expression
+				enable["pointsto"] = false
+				enable["whicherrs"] = false
 
 			case ast.Expr, ast.Decl, *ast.ValueSpec:
-				enable["pointsto"] = true // an expr, maybe
+				// an expression, maybe
+				enable["pointsto"] = true
+				enable["whicherrs"] = true
 
 			default:
 				// Comment, Field, KeyValueExpr, etc: ascend.
@@ -198,7 +203,7 @@ func guessImportPath(filename string, buildContext *build.Context) (srcdir, impo
 		if d >= 0 && d < minD {
 			minD = d
 			srcdir = gopathDir
-			importPath = strings.Join(segmentedAbsFileDir[len(segmentedAbsFileDir)-minD:], string(os.PathSeparator))
+			importPath = path.Join(segmentedAbsFileDir[len(segmentedAbsFileDir)-minD:]...)
 		}
 	}
 	if srcdir == "" {

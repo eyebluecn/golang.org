@@ -12,6 +12,8 @@ import (
 
 	"golang.org/x/net/bpf"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
+	"golang.org/x/net/nettest"
 )
 
 // A virtualMachine is a BPF virtual machine which can process an
@@ -33,7 +35,7 @@ func canUseOSVM() bool {
 }
 
 // All BPF tests against both the Go VM and OS VM are assumed to
-// be used with a UDP socket.  As a result, the entire contents
+// be used with a UDP socket. As a result, the entire contents
 // of a UDP datagram is sent through the BPF program, but only
 // the body after the UDP header will ever be returned in output.
 
@@ -85,7 +87,7 @@ func (mvm *multiVirtualMachine) Run(in []byte) (int, error) {
 	}
 
 	// All tests have a UDP header as part of input, because the OS VM
-	// packets always will.  For the Go VM, this output is trimmed before
+	// packets always will. For the Go VM, this output is trimmed before
 	// being sent back to tests.
 	goOut, goErr := mvm.goVM.Run(in)
 	if goOut >= udpHeaderLen {
@@ -137,7 +139,7 @@ type osVirtualMachine struct {
 // testOSVM creates a virtualMachine which uses the OS's BPF VM by injecting
 // packets into a UDP listener with a BPF program attached to it.
 func testOSVM(t *testing.T, filter []bpf.Instruction) (virtualMachine, func()) {
-	l, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	l, err := nettest.NewLocalPacketListener("udp")
 	if err != nil {
 		t.Fatalf("failed to open OS VM UDP listener: %v", err)
 	}
@@ -147,12 +149,17 @@ func testOSVM(t *testing.T, filter []bpf.Instruction) (virtualMachine, func()) {
 		t.Fatalf("failed to compile BPF program: %v", err)
 	}
 
-	p := ipv4.NewPacketConn(l)
-	if err = p.SetBPF(prog); err != nil {
+	ip := l.LocalAddr().(*net.UDPAddr).IP
+	if ip.To4() != nil && ip.To16() == nil {
+		err = ipv4.NewPacketConn(l).SetBPF(prog)
+	} else {
+		err = ipv6.NewPacketConn(l).SetBPF(prog)
+	}
+	if err != nil {
 		t.Fatalf("failed to attach BPF program to listener: %v", err)
 	}
 
-	s, err := net.Dial("udp4", l.LocalAddr().String())
+	s, err := net.Dial(l.LocalAddr().Network(), l.LocalAddr().String())
 	if err != nil {
 		t.Fatalf("failed to dial connection to listener: %v", err)
 	}

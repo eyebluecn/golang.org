@@ -53,8 +53,10 @@ Error: no object for identifier
 
 Error: couldn't find declaration of Nonesuch in "lib"
 -------- @definition qualified-nopkg --------
-
-Error: no object for identifier
+{
+	"objpos": "testdata/src/definition-json/main.go:12:2",
+	"desc": "package nosuchpkg"
+}
 -------- @definition select-field --------
 {
 	"objpos": "testdata/src/definition-json/main.go:40:16",
